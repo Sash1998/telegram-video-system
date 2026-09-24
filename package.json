@@ -1,0 +1,13 @@
+{
+  "name": "tg-video-miniapp-api",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "api.js",
+  "scripts": {
+    "start": "node api.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0"
+  },
+  "engines": { "node": ">=20" }
+}

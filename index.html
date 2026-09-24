@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+<title>Video Streaming</title>
+<link rel="stylesheet" href="styles.css" />
+<!-- Monetag SDK (SDK-less in-app ad format). Replace zone id below. -->
+<script src="https://fpyf8.com/88/tag.min.js" data-zone="YOUR_MONETAG_ZONE_ID" async data-cfasync="false"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🎬 Video Streaming</div>
+  <div class="user" id="userInfo"></div>
+</header>
+
+<main id="app">
+  <section id="view-home" class="view">
+    <h1>Available Videos</h1>
+    <div id="videoList" class="grid"></div>
+    <div id="emptyState" class="empty" hidden>No videos yet.</div>
+    <button id="loadMore" class="btn ghost" hidden>Load more</button>
+  </section>
+
+  <section id="view-detail" class="view" hidden>
+    <button class="btn ghost back" id="backBtn">← Back</button>
+    <div class="card">
+      <img id="detailThumb" class="thumb" alt="" />
+      <h2 id="detailTitle"></h2>
+      <p id="detailDesc" class="muted"></p>
+      <ul class="meta">
+        <li>⏱ <span id="detailDuration"></span></li>
+        <li>📦 <span id="detailSize"></span></li>
+        <li>👁 <span id="detailViews"></span> views</li>
+        <li>📥 <span id="detailDownloads"></span> downloads</li>
+      </ul>
+      <div class="actions">
+        <button class="btn primary" id="watchBtn">▶️ Watch (stream)</button>
+        <button class="btn" id="downloadBtn">📥 Download original</button>
+      </div>
+      <p class="note">
+        Delivery is handled directly by Telegram. The Mini App does not stream
+        the file itself.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  Powered by Telegram • Mini App hosted on GitHub Pages
+</footer>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

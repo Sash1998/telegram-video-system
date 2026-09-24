@@ -96,8 +96,13 @@ function openDetail(v) {
   $("#detailViews").textContent = v.views ?? 0;
   $("#detailDownloads").textContent = v.downloads ?? 0;
 
-  $("#watchBtn").onclick = () => openInBot(`video_${v.id}`);
-  $("#downloadBtn").onclick = () => openInBot(`get_${v.id}`);
+  const watchBtn = $("#watchBtn");
+  if (watchBtn) {
+    watchBtn.textContent = "▶️ WATCH / STREAM";
+    watchBtn.onclick = () => watchAndClose(v.id);
+  }
+  const dl = $("#downloadBtn");
+  if (dl) dl.style.display = "none";
 
   try {
     window.show_XXXXXXX?.({
@@ -108,36 +113,29 @@ function openDetail(v) {
   tg?.HapticFeedback?.impactOccurred?.("light");
 }
 
-function openInBot(payload) {
-  const url = botLink(payload);
-  console.log("openInBot:", url);   // helpful for debugging
+function watchAndClose(videoId) {
+  const url = botLink(`video_${videoId}`);
+  console.log("watchAndClose ->", url);
+  tg?.HapticFeedback?.impactOccurred?.("medium");
 
-  // Preferred: Telegram's own method
-  if (tg && typeof tg.openTelegramLink === "function") {
-    try {
+  try {
+    if (tg && typeof tg.openTelegramLink === "function") {
       tg.openTelegramLink(url);
-      return;
-    } catch (e) {
-      console.warn("openTelegramLink failed:", e);
-    }
-  }
-
-  // Fallback 1: openLink (opens in Telegram's in-app browser)
-  if (tg && typeof tg.openLink === "function") {
-    try {
+    } else if (tg && typeof tg.openLink === "function") {
       tg.openLink(url);
+    } else {
+      window.location.href = url;
       return;
-    } catch (e) {
-      console.warn("openLink failed:", e);
     }
+  } catch (e) {
+    console.warn("openTelegramLink failed:", e);
+    window.location.href = url;
+    return;
   }
 
-  // Fallback 2: plain window.open
-  const w = window.open(url, "_blank");
-  if (!w) {
-    // Popup blocked — try navigating current window
-    window.location.href = url;
-  }
+  setTimeout(() => {
+    try { tg?.close?.(); } catch (e) {}
+  }, 150);
 }
 
 function back() {

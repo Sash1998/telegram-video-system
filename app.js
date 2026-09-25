@@ -13,7 +13,6 @@ const state = {
   current: null,
 };
 
-// ---------- helpers ----------
 function humanSize(n) {
   if (!n && n !== 0) return "—";
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -49,7 +48,6 @@ async function api(path) {
   return r.json();
 }
 
-// ---------- rendering ----------
 const $ = (s) => document.querySelector(s);
 const listEl = $("#videoList");
 const emptyEl = $("#emptyState");
@@ -99,25 +97,17 @@ function openDetail(v) {
   const watchBtn = $("#watchBtn");
   if (watchBtn) {
     watchBtn.textContent = "▶️ WATCH / STREAM";
-    watchBtn.onclick = () => watchAndClose(v.id);
+    watchBtn.onclick = () => watchWithAd(v.id);
   }
   const dl = $("#downloadBtn");
   if (dl) dl.style.display = "none";
 
-  try {
-    window.show_XXXXXXX?.({
-      type: "inApp",
-      inAppSettings: { frequency: 2, capping: 0.1, interval: 30, timeout: 5, everyPage: false },
-    });
-  } catch (e) {}
   tg?.HapticFeedback?.impactOccurred?.("light");
 }
 
-function watchAndClose(videoId) {
+function deliverVideo(videoId) {
   const url = botLink(`video_${videoId}`);
-  console.log("watchAndClose ->", url);
-  tg?.HapticFeedback?.impactOccurred?.("medium");
-
+  console.log("deliverVideo ->", url);
   try {
     if (tg && typeof tg.openTelegramLink === "function") {
       tg.openTelegramLink(url);
@@ -132,10 +122,42 @@ function watchAndClose(videoId) {
     window.location.href = url;
     return;
   }
-
   setTimeout(() => {
     try { tg?.close?.(); } catch (e) {}
   }, 150);
+}
+
+function notifyUser(msg) {
+  try {
+    if (tg && typeof tg.showAlert === "function") {
+      tg.showAlert(msg);
+    } else {
+      alert(msg);
+    }
+  } catch (e) {
+    alert(msg);
+  }
+}
+
+function watchWithAd(videoId) {
+  tg?.HapticFeedback?.impactOccurred?.("medium");
+
+  if (typeof window.show_11887264 !== "function") {
+    console.warn("Monetag SDK not loaded — delivering without ad");
+    deliverVideo(videoId);
+    return;
+  }
+
+  window
+    .show_11887264()
+    .then(() => {
+      console.log("Ad completed — delivering video");
+      deliverVideo(videoId);
+    })
+    .catch((e) => {
+      console.warn("Ad not completed:", e);
+      notifyUser("Please watch the full ad to continue.");
+    });
 }
 
 function back() {
@@ -143,7 +165,6 @@ function back() {
   $("#view-home").hidden = false;
 }
 
-// ---------- data loading ----------
 async function loadPage() {
   try {
     const data = await api(`/api/videos?limit=${state.pageSize}&offset=${state.offset}`);
@@ -157,7 +178,6 @@ async function loadPage() {
   }
 }
 
-// ---------- bootstrap ----------
 document.addEventListener("DOMContentLoaded", async () => {
   if (tg?.initDataUnsafe?.user) {
     const u = tg.initDataUnsafe.user;

@@ -5,13 +5,7 @@ tg?.ready();
 tg?.expand();
 tg?.setHeaderColor?.("#0f1115");
 
-const state = {
-  offset: 0,
-  pageSize: C.PAGE_SIZE || 24,
-  total: 0,
-  videos: [],
-  current: null,
-};
+const state = { current: null };
 
 function humanSize(n) {
   if (!n && n !== 0) return "—";
@@ -31,12 +25,6 @@ function humanDuration(sec) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-
 function botLink(startParam) {
   const bot = (C.BOT_USERNAME || "").replace(/^@/, "");
   return `https://t.me/${bot}?start=${encodeURIComponent(startParam)}`;
@@ -49,44 +37,9 @@ async function api(path) {
 }
 
 const $ = (s) => document.querySelector(s);
-const listEl = $("#videoList");
-const emptyEl = $("#emptyState");
-const loadMoreEl = $("#loadMore");
 
-// ---------- grid (fallback) ----------
-function cardFor(v) {
-  const el = document.createElement("div");
-  el.className = "card";
-  const thumb = v.thumbnail_url
-    ? `<img class="thumb" loading="lazy" src="${v.thumbnail_url}" alt="">`
-    : `<div class="thumb"></div>`;
-  el.innerHTML = `
-    ${thumb}
-    <h3>${escapeHtml(v.title)}</h3>
-    <div class="sub">${humanDuration(v.duration)} • ${humanSize(v.file_size)}</div>
-    <button class="btn primary">Open</button>
-  `;
-  el.querySelector("button").addEventListener("click", () => openDetail(v));
-  return el;
-}
-
-function renderHome() {
-  listEl.innerHTML = "";
-  if (state.videos.length === 0) {
-    emptyEl.hidden = false;
-    loadMoreEl.hidden = true;
-    return;
-  }
-  emptyEl.hidden = true;
-  state.videos.forEach((v) => listEl.appendChild(cardFor(v)));
-  loadMoreEl.hidden = state.videos.length >= state.total;
-}
-
-// ---------- detail view ----------
-function openDetail(v) {
+function renderVideo(v) {
   state.current = v;
-  $("#view-home").hidden = true;
-  $("#view-detail").hidden = false;
 
   const thumb = $("#detailThumb");
   thumb.src = v.thumbnail_url || "";
@@ -100,20 +53,11 @@ function openDetail(v) {
   $("#detailDownloads").textContent = v.downloads ?? 0;
 
   const watchBtn = $("#watchBtn");
-  if (watchBtn) {
-    watchBtn.textContent = "▶️ WATCH / STREAM";
-    watchBtn.onclick = () => watchWithAd(v.id);
-  }
-
-  tg?.HapticFeedback?.impactOccurred?.("light");
+  watchBtn.disabled = false;
+  watchBtn.textContent = "▶️ WATCH / STREAM";
+  watchBtn.onclick = () => watchWithAd(v.id);
 }
 
-function back() {
-  $("#view-detail").hidden = true;
-  $("#view-home").hidden = false;
-}
-
-// ---------- delivery ----------
 function deliverVideo(videoId) {
   const url = botLink(`video_${videoId}`);
   console.log("deliverVideo ->", url);
@@ -138,14 +82,9 @@ function deliverVideo(videoId) {
 
 function notifyUser(msg) {
   try {
-    if (tg && typeof tg.showAlert === "function") {
-      tg.showAlert(msg);
-    } else {
-      alert(msg);
-    }
-  } catch (e) {
-    alert(msg);
-  }
+    if (tg && typeof tg.showAlert === "function") tg.showAlert(msg);
+    else alert(msg);
+  } catch (e) { alert(msg); }
 }
 
 function watchWithAd(videoId) {
@@ -159,65 +98,55 @@ function watchWithAd(videoId) {
 
   window
     .show_11887264()
-    .then(() => {
-      console.log("Ad completed — delivering video");
-      deliverVideo(videoId);
-    })
+    .then(() => deliverVideo(videoId))
     .catch((e) => {
       console.warn("Ad not completed:", e);
       notifyUser("Please watch the full ad to continue.");
     });
 }
 
-// ---------- loading ----------
-async function loadSingleVideo(videoId) {
+async function loadVideoById(id) {
   try {
-    const v = await api(`/api/video?id=${videoId}`);
+    const v = await api(`/api/video?id=${id}`);
     if (!v || !v.id) throw new Error("Video not found");
-    openDetail(v);
+    renderVideo(v);
   } catch (e) {
-    console.error("loadSingleVideo failed:", e);
-    tg?.showAlert ? tg.showAlert("Video not found.") : alert("Video not found.");
-    // Fall back to grid
-    await loadPage();
+    console.error("loadVideoById failed:", e);
+    notifyUser("Video not found.");
   }
 }
 
-async function loadPage() {
+async function loadLatestVideo() {
   try {
-    const data = await api(`/api/videos?limit=${state.pageSize}&offset=${state.offset}`);
-    state.total = data.total ?? data.items?.length ?? 0;
-    state.videos = state.videos.concat(data.items || []);
-    state.offset += (data.items || []).length;
-    renderHome();
+    const data = await api(`/api/videos?limit=1&offset=0`);
+    const items = data.items || [];
+    if (items.length === 0) {
+      notifyUser("No videos available yet.");
+      return;
+    }
+    renderVideo(items[0]);
   } catch (e) {
-    console.error(e);
-    tg?.showAlert ? tg.showAlert("Failed to load videos.") : alert("Failed to load videos.");
+    console.error("loadLatestVideo failed:", e);
+    notifyUser("Failed to load video.");
   }
 }
 
-// ---------- bootstrap ----------
 document.addEventListener("DOMContentLoaded", async () => {
   if (tg?.initDataUnsafe?.user) {
     const u = tg.initDataUnsafe.user;
     $("#userInfo").textContent = u.username ? "@" + u.username : (u.first_name || "");
   }
-  $("#backBtn").addEventListener("click", back);
-  loadMoreEl.addEventListener("click", loadPage);
 
-  // Read start_param from Telegram (e.g. "video_10")
   const startParam = tg?.initDataUnsafe?.start_param || "";
   console.log("start_param:", startParam);
 
   if (startParam.startsWith("video_")) {
     const vid = parseInt(startParam.slice("video_".length), 10);
     if (!isNaN(vid)) {
-      // Show ONLY this video's detail view
-      await loadSingleVideo(vid);
+      await loadVideoById(vid);
       return;
     }
   }
 
-  // No start_param → show the full grid
-  await loadPage();
+  await loadLatestVideo();
 });

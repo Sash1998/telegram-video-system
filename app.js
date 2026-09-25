@@ -53,6 +53,7 @@ const listEl = $("#videoList");
 const emptyEl = $("#emptyState");
 const loadMoreEl = $("#loadMore");
 
+// ---------- grid (fallback) ----------
 function cardFor(v) {
   const el = document.createElement("div");
   el.className = "card";
@@ -81,12 +82,16 @@ function renderHome() {
   loadMoreEl.hidden = state.videos.length >= state.total;
 }
 
+// ---------- detail view ----------
 function openDetail(v) {
   state.current = v;
   $("#view-home").hidden = true;
   $("#view-detail").hidden = false;
-  $("#detailThumb").src = v.thumbnail_url || "";
-  $("#detailThumb").style.display = v.thumbnail_url ? "block" : "none";
+
+  const thumb = $("#detailThumb");
+  thumb.src = v.thumbnail_url || "";
+  thumb.style.display = v.thumbnail_url ? "block" : "none";
+
   $("#detailTitle").textContent = v.title || "Untitled";
   $("#detailDesc").textContent = v.description || "";
   $("#detailDuration").textContent = humanDuration(v.duration);
@@ -99,12 +104,16 @@ function openDetail(v) {
     watchBtn.textContent = "▶️ WATCH / STREAM";
     watchBtn.onclick = () => watchWithAd(v.id);
   }
-  const dl = $("#downloadBtn");
-  if (dl) dl.style.display = "none";
 
   tg?.HapticFeedback?.impactOccurred?.("light");
 }
 
+function back() {
+  $("#view-detail").hidden = true;
+  $("#view-home").hidden = false;
+}
+
+// ---------- delivery ----------
 function deliverVideo(videoId) {
   const url = botLink(`video_${videoId}`);
   console.log("deliverVideo ->", url);
@@ -160,9 +169,18 @@ function watchWithAd(videoId) {
     });
 }
 
-function back() {
-  $("#view-detail").hidden = true;
-  $("#view-home").hidden = false;
+// ---------- loading ----------
+async function loadSingleVideo(videoId) {
+  try {
+    const v = await api(`/api/video?id=${videoId}`);
+    if (!v || !v.id) throw new Error("Video not found");
+    openDetail(v);
+  } catch (e) {
+    console.error("loadSingleVideo failed:", e);
+    tg?.showAlert ? tg.showAlert("Video not found.") : alert("Video not found.");
+    // Fall back to grid
+    await loadPage();
+  }
 }
 
 async function loadPage() {
@@ -178,6 +196,7 @@ async function loadPage() {
   }
 }
 
+// ---------- bootstrap ----------
 document.addEventListener("DOMContentLoaded", async () => {
   if (tg?.initDataUnsafe?.user) {
     const u = tg.initDataUnsafe.user;
@@ -185,5 +204,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   $("#backBtn").addEventListener("click", back);
   loadMoreEl.addEventListener("click", loadPage);
+
+  // Read start_param from Telegram (e.g. "video_10")
+  const startParam = tg?.initDataUnsafe?.start_param || "";
+  console.log("start_param:", startParam);
+
+  if (startParam.startsWith("video_")) {
+    const vid = parseInt(startParam.slice("video_".length), 10);
+    if (!isNaN(vid)) {
+      // Show ONLY this video's detail view
+      await loadSingleVideo(vid);
+      return;
+    }
+  }
+
+  // No start_param → show the full grid
   await loadPage();
 });

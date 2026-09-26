@@ -25,11 +25,6 @@ function humanDuration(sec) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function botLink(startParam) {
-  const bot = (C.BOT_USERNAME || "").replace(/^@/, "");
-  return `https://t.me/${bot}?start=${encodeURIComponent(startParam)}`;
-}
-
 async function api(path) {
   const r = await fetch(C.API_BASE.replace(/\/$/, "") + path, { cache: "no-store" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -55,26 +50,6 @@ function renderVideo(v) {
   watchBtn.onclick = () => watchWithAd(v.id);
 }
 
-function deliverVideo(videoId) {
-  const url = botLink(`video_${videoId}`);
-  try {
-    if (tg && typeof tg.openTelegramLink === "function") {
-      tg.openTelegramLink(url);
-    } else if (tg && typeof tg.openLink === "function") {
-      tg.openLink(url);
-    } else {
-      window.location.href = url;
-      return;
-    }
-  } catch (e) {
-    window.location.href = url;
-    return;
-  }
-  setTimeout(() => {
-    try { tg?.close?.(); } catch (e) {}
-  }, 150);
-}
-
 function notifyUser(msg) {
   try {
     if (tg && typeof tg.showAlert === "function") tg.showAlert(msg);
@@ -84,15 +59,39 @@ function notifyUser(msg) {
 
 function watchWithAd(videoId) {
   tg?.HapticFeedback?.impactOccurred?.("medium");
+
   if (typeof window.show_11887264 !== "function") {
-    deliverVideo(videoId);
+    notifyUser("Ad system not loaded. Please try again.");
     return;
   }
-  window
-    .show_11887264()
-    .then(() => deliverVideo(videoId))
+
+  window.show_11887264()
+    .then(() => {
+      // Ad completed — send reward request to the API
+      const initData = tg?.initData || "";
+
+      fetch(`${C.API_BASE.replace(/\/$/, "")}/api/reward`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: videoId, initData: initData }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.ok) {
+            // Close the Mini App — the bot will deliver the video
+            try { tg?.close?.(); } catch (e) {}
+          } else {
+            notifyUser("Error: " + (data.error || "could not deliver video"));
+          }
+        })
+        .catch((e) => {
+          console.error("reward request failed:", e);
+          notifyUser("Network error. Please try again.");
+        });
+    })
     .catch((e) => {
-      notifyUser("Please watch the full ad to continue.");
+      console.warn("Ad not completed:", e);
+      notifyUser("Please watch the full ad to get the video.");
     });
 }
 
@@ -110,10 +109,7 @@ async function loadLatestVideo() {
   try {
     const data = await api(`/api/videos?limit=1&offset=0`);
     const items = data.items || [];
-    if (items.length === 0) {
-      notifyUser("No videos available yet.");
-      return;
-    }
+    if (items.length === 0) { notifyUser("No videos available yet."); return; }
     renderVideo(items[0]);
   } catch (e) {
     notifyUser("Failed to load video.");
@@ -125,7 +121,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const u = tg.initDataUnsafe.user;
     $("#userInfo").textContent = u.username ? "@" + u.username : (u.first_name || "");
   }
-
   const startParam = tg?.initDataUnsafe?.start_param || "";
   const urlParams = new URLSearchParams(window.location.search);
   const urlStartParam = urlParams.get("startapp") || urlParams.get("start") || "";
@@ -133,11 +128,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (effectiveParam.startsWith("video_")) {
     const vid = parseInt(effectiveParam.slice("video_".length), 10);
-    if (!isNaN(vid)) {
-      await loadVideoById(vid);
-      return;
-    }
+    if (!isNaN(vid)) { await loadVideoById(vid); return; }
   }
-
   await loadLatestVideo();
 });
